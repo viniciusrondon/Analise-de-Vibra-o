@@ -1,0 +1,96 @@
+﻿%% Cálculos Iniciais
+%Importar dados da aceleração da viga:
+Tabela_Acel = importdata('PorticoTriangular_Medicao01.txt');
+
+
+%Tabela de tempo retirada do arquivo.txt
+t = Tabela_Acel.data(:,1);
+%Aceleração em m/s^2
+Aceleracao = 9.81*Tabela_Acel.data(:,2);
+
+
+%Intervalo de tempo entre duas medições
+Delta_t = 0.000488;
+ 
+clf
+
+
+%% Gráfico de Aceleração(sem filtro):
+plot(t,Aceleracao)
+title('Aceleração sem filtro')
+xlabel('Tempo(s)')
+ylabel('Vel.[m/s^2]')
+grid on
+grid minor
+
+
+%% Filtragem:
+Aceleracao_filtrada = sgolayfilt(Aceleracao,14,1501);
+figure
+nexttile
+plot(t,Aceleracao,t,Aceleracao_filtrada)
+title('Comparação de aceleração')
+xlabel('Tempo(s)')
+ylabel('Acel.[m/s^2]')
+legend('sem filtro','com filtro')
+grid on
+grid minor
+
+
+%% Pontos de zero-crossing:
+EcgData = transpose(Aceleracao_filtrada')
+zcd = dsp.ZeroCrossingDetector
+numZeroCross = zcd(EcgData)
+nexttile
+plot(t,EcgData,'b',[0 25],[0 0],'r','linewidth',0.5)
+title('Zero-crossing')
+xlabel('Tempo[s]')
+ylabel('Aceleração [m/s^2]')
+grid on
+grid minor
+
+
+%% Estimativas da frequência natural amortecida e do período natural amortecido:
+numZeroCross_real = cast(numZeroCross,'like',t); %o número gerado é inteiro. 
+%Portanto precisa ser ajustado para ser um número real/decimal.
+t_max= (max(t(:,1)));
+Num_periodo = numZeroCross_real*0.5
+T_amortecido = (t_max-1)/Num_periodo
+f_d = 1/T_amortecido
+%% Decremento logarítmico e Razão de Amortecimento:
+ind = 2200:30000;
+[Ypk,Xpk,Wpk,Ppk] = findpeaks(Aceleracao_filtrada(ind));
+n_peaks=numel(Xpk);  
+
+
+contador1 = 1;
+contador2 = n_peaks;
+while contador1 <= contador2
+    if Ypk(contador1)<0.01
+        Ypk(contador1,:) = [];
+        Xpk(contador1,:) = [];
+        contador2 = contador2 - 1;
+    else contador1 = contador1 + 1;
+    end    
+end
+n_peaks = contador2;
+plot(t-1.0731,Aceleracao_filtrada,t(Xpk),Ypk,'dr');
+title('Log-Dec')
+xlabel('Tempo(s)')
+ylabel('Aceleração[m/s^2]')
+grid on
+grid minor
+
+
+t_new = t(Xpk);  
+y_new = Ypk;  
+
+
+%Cálculo do Decremento Logarítmico e da razão de amortecimento:
+Log_Dec = zeros(length(n_peaks));  
+for nn = 1:n_peaks-1 %
+    Log_Dec(nn)= log(y_new(nn)/y_new(nn+1));
+end  
+Mean_dec = mean(Log_Dec)  
+damp_ratio_logdec = 1/sqrt(1+((2*pi/(Mean_dec))^2))
+f_n = f_d/sqrt(1-damp_ratio_logdec^2)
